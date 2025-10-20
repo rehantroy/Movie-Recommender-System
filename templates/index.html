@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recommender</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Movie Recommender</h1>
+            <p>Rate some movies to get personalized recommendations</p>
+        </header>
+
+        <div class="search-container">
+            <input type="text" id="searchInput" placeholder="Search for movies...">
+            <button onclick="searchMovies()">Search</button>
+        </div>
+
+        <main>
+            <section class="rating-section">
+                <h2>Rate Movies</h2>
+                <div class="movie-grid" id="movieGrid">
+                    <!-- Movies will be loaded here dynamically -->
+                </div>
+            </section>
+
+            <section class="recommendations-section">
+                <h2>Your Recommendations</h2>
+                <div class="recommendations-grid" id="recommendationsGrid">
+                    <!-- Recommendations will be loaded here -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        let userRatings = {};
+        let allMovies = [];
+
+        async function loadMovies() {
+            const response = await fetch('/api/movies');
+            allMovies = await response.json();
+            displayMovies(allMovies);
+        }
+
+        async function searchMovies() {
+            const query = document.getElementById('searchInput').value;
+            if (!query) {
+                displayMovies(allMovies);
+                return;
+            }
+
+            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+            const movies = await response.json();
+            displayMovies(movies);
+        }
+
+        function displayMovies(movies) {
+            const movieGrid = document.getElementById('movieGrid');
+            movieGrid.innerHTML = '';
+            
+            movies.forEach(movie => {
+                const movieCard = document.createElement('div');
+                movieCard.className = 'movie-card';
+                movieCard.innerHTML = `
+                    <div class="movie-poster">
+                        <img src="${movie.poster_url || 'static/placeholder.jpg'}" alt="${movie.title}">
+                    </div>
+                    <h3>${movie.title}</h3>
+                    <p>${movie.genres}</p>
+                    <div class="rating-stars">
+                        ${[1, 2, 3, 4, 5].map(rating => `
+                            <span class="star" data-rating="${rating}" data-movie-id="${movie.movieId}">★</span>
+                        `).join('')}
+                    </div>
+                `;
+                movieGrid.appendChild(movieCard);
+            });
+
+            // Add event listeners to stars
+            document.querySelectorAll('.star').forEach(star => {
+                star.addEventListener('click', function() {
+                    const rating = this.dataset.rating;
+                    const movieId = this.dataset.movieId;
+                    userRatings[movieId] = parseInt(rating);
+                    
+                    // Update star colors
+                    const stars = this.parentElement.querySelectorAll('.star');
+                    stars.forEach(s => {
+                        s.classList.toggle('active', parseInt(s.dataset.rating) <= rating);
+                    });
+
+                    getRecommendations();
+                });
+            });
+        }
+
+        async function getRecommendations() {
+            if (Object.keys(userRatings).length === 0) return;
+
+            const response = await fetch('/api/recommendations', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ ratings: userRatings })
+            });
+
+            const recommendations = await response.json();
+            const recommendationsGrid = document.getElementById('recommendationsGrid');
+            recommendationsGrid.innerHTML = '';
+
+            recommendations.forEach(movie => {
+                const movieCard = document.createElement('div');
+                movieCard.className = 'movie-card recommendation';
+                movieCard.innerHTML = `
+                    <div class="movie-poster">
+                        <img src="${movie.poster_url || 'static/placeholder.jpg'}" alt="${movie.title}">
+                    </div>
+                    <h3>${movie.title}</h3>
+                    <p>${movie.genres}</p>
+                    <p class="predicted-rating">Predicted Rating: ${movie.predicted_rating.toFixed(1)}</p>
+                `;
+                recommendationsGrid.appendChild(movieCard);
+            });
+        }
+
+        // Add event listener for search input
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchMovies();
+            }
+        });
+
+        // Load movies when the page loads
+        document.addEventListener('DOMContentLoaded', loadMovies);
+    </script>
+</body>
+</html> 
