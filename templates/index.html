@@ -3,33 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Movie Recommender</title>
+    <title>🎬 Movie Recommender</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Movie Recommender</h1>
-            <p>Rate some movies to get personalized recommendations</p>
+            <div class="header-content">
+                <h1>🎬 Movie Recommender</h1>
+                <p>Rate your favorite movies and get personalized recommendations</p>
+            </div>
+            <div class="stats-bar">
+                <div class="stat">
+                    <span class="stat-label">Movies Rated</span>
+                    <span class="stat-value" id="ratedCount">0</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Recommendations</span>
+                    <span class="stat-value" id="recCount">0</span>
+                </div>
+            </div>
         </header>
 
         <div class="search-container">
-            <input type="text" id="searchInput" placeholder="Search for movies...">
-            <button onclick="searchMovies()">Search</button>
+            <div class="search-wrapper">
+                <input type="text" id="searchInput" placeholder="🔍 Search movies...">
+                <button onclick="searchMovies()" class="search-btn">Search</button>
+                <button onclick="resetSearch()" class="reset-btn" id="resetBtn" style="display:none;">Reset</button>
+            </div>
         </div>
 
         <main>
             <section class="rating-section">
-                <h2>Rate Movies</h2>
+                <div class="section-header">
+                    <h2>⭐ Rate Movies</h2>
+                    <p class="section-subtitle">Click on stars to rate. Rate at least 3 movies to see recommendations!</p>
+                </div>
+                <div class="loading-spinner" id="moviesLoader" style="display: none;"></div>
                 <div class="movie-grid" id="movieGrid">
                     <!-- Movies will be loaded here dynamically -->
                 </div>
             </section>
 
             <section class="recommendations-section">
-                <h2>Your Recommendations</h2>
+                <div class="section-header">
+                    <h2>🎯 Your Recommendations</h2>
+                    <p class="section-subtitle">Based on your ratings</p>
+                </div>
+                <div class="loading-spinner" id="recsLoader" style="display: none;"></div>
                 <div class="recommendations-grid" id="recommendationsGrid">
-                    <!-- Recommendations will be loaded here -->
+                    <div class="empty-state">
+                        <p>👀 Rate movies to see recommendations here</p>
+                    </div>
                 </div>
             </section>
         </main>
@@ -38,42 +63,96 @@
     <script>
         let userRatings = {};
         let allMovies = [];
+        let isSearching = false;
+
+        function updateStats() {
+            document.getElementById('ratedCount').textContent = Object.keys(userRatings).length;
+        }
 
         async function loadMovies() {
-            const response = await fetch('/api/movies');
-            allMovies = await response.json();
-            displayMovies(allMovies);
+            try {
+                document.getElementById('moviesLoader').style.display = 'flex';
+                const response = await fetch('/api/movies');
+                if (!response.ok) throw new Error('Failed to load movies');
+                allMovies = await response.json();
+                displayMovies(allMovies);
+            } catch (error) {
+                console.error('Error loading movies:', error);
+                showError('Failed to load movies. Please refresh the page.');
+            } finally {
+                document.getElementById('moviesLoader').style.display = 'none';
+            }
         }
 
         async function searchMovies() {
-            const query = document.getElementById('searchInput').value;
+            const query = document.getElementById('searchInput').value.trim();
+            const resetBtn = document.getElementById('resetBtn');
+            
             if (!query) {
                 displayMovies(allMovies);
+                isSearching = false;
+                resetBtn.style.display = 'none';
                 return;
             }
 
-            const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-            const movies = await response.json();
-            displayMovies(movies);
+            try {
+                document.getElementById('moviesLoader').style.display = 'flex';
+                isSearching = true;
+                resetBtn.style.display = 'inline-block';
+                const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error('Search failed');
+                const movies = await response.json();
+                displayMovies(movies);
+            } catch (error) {
+                console.error('Error searching movies:', error);
+                showError('Search failed. Please try again.');
+            } finally {
+                document.getElementById('moviesLoader').style.display = 'none';
+            }
+        }
+
+        function resetSearch() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('resetBtn').style.display = 'none';
+            isSearching = false;
+            displayMovies(allMovies);
         }
 
         function displayMovies(movies) {
             const movieGrid = document.getElementById('movieGrid');
+            
+            if (!movies || movies.length === 0) {
+                movieGrid.innerHTML = '<div class="empty-state">No movies found</div>';
+                return;
+            }
+            
             movieGrid.innerHTML = '';
             
-            movies.forEach(movie => {
+            movies.forEach((movie, index) => {
                 const movieCard = document.createElement('div');
                 movieCard.className = 'movie-card';
+                movieCard.style.animationDelay = `${index * 0.05}s`;
+                
+                const currentRating = userRatings[movie.movieId] || 0;
+                const starsHTML = [1, 2, 3, 4, 5].map(rating => `
+                    <span class="star ${rating <= currentRating ? 'active' : ''}" 
+                          data-rating="${rating}" 
+                          data-movie-id="${movie.movieId}"
+                          title="Rate ${rating} stars">★</span>
+                `).join('');
+                
                 movieCard.innerHTML = `
                     <div class="movie-poster">
-                        <img src="${movie.poster_url || 'static/placeholder.jpg'}" alt="${movie.title}">
+                        <img src="${movie.poster_url || 'https://via.placeholder.com/200x300?text=No+Image'}" 
+                             alt="${movie.title}"
+                             onerror="this.src='https://via.placeholder.com/200x300?text=No+Image'">
                     </div>
-                    <h3>${movie.title}</h3>
-                    <p>${movie.genres}</p>
-                    <div class="rating-stars">
-                        ${[1, 2, 3, 4, 5].map(rating => `
-                            <span class="star" data-rating="${rating}" data-movie-id="${movie.movieId}">★</span>
-                        `).join('')}
+                    <div class="movie-info">
+                        <h3>${movie.title}</h3>
+                        <p class="genres">${movie.genres || 'N/A'}</p>
+                        <div class="rating-stars">
+                            ${starsHTML}
+                        </div>
                     </div>
                 `;
                 movieGrid.appendChild(movieCard);
@@ -82,9 +161,9 @@
             // Add event listeners to stars
             document.querySelectorAll('.star').forEach(star => {
                 star.addEventListener('click', function() {
-                    const rating = this.dataset.rating;
+                    const rating = parseInt(this.dataset.rating);
                     const movieId = this.dataset.movieId;
-                    userRatings[movieId] = parseInt(rating);
+                    userRatings[movieId] = rating;
                     
                     // Update star colors
                     const stars = this.parentElement.querySelectorAll('.star');
@@ -92,39 +171,92 @@
                         s.classList.toggle('active', parseInt(s.dataset.rating) <= rating);
                     });
 
-                    getRecommendations();
+                    updateStats();
+                    if (Object.keys(userRatings).length >= 3) {
+                        getRecommendations();
+                    }
+                });
+
+                star.addEventListener('mouseenter', function() {
+                    const rating = parseInt(this.dataset.rating);
+                    const stars = this.parentElement.querySelectorAll('.star');
+                    stars.forEach(s => {
+                        s.classList.toggle('hover', parseInt(s.dataset.rating) <= rating);
+                    });
+                });
+
+                star.parentElement.addEventListener('mouseleave', function() {
+                    this.querySelectorAll('.star').forEach(s => {
+                        s.classList.remove('hover');
+                    });
                 });
             });
         }
 
         async function getRecommendations() {
-            if (Object.keys(userRatings).length === 0) return;
+            if (Object.keys(userRatings).length < 3) return;
 
-            const response = await fetch('/api/recommendations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ ratings: userRatings })
-            });
+            try {
+                document.getElementById('recsLoader').style.display = 'flex';
+                const response = await fetch('/api/recommendations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ratings: userRatings })
+                });
 
-            const recommendations = await response.json();
-            const recommendationsGrid = document.getElementById('recommendationsGrid');
-            recommendationsGrid.innerHTML = '';
+                if (!response.ok) throw new Error('Failed to get recommendations');
+                
+                const recommendations = await response.json();
+                const recommendationsGrid = document.getElementById('recommendationsGrid');
+                recommendationsGrid.innerHTML = '';
 
-            recommendations.forEach(movie => {
-                const movieCard = document.createElement('div');
-                movieCard.className = 'movie-card recommendation';
-                movieCard.innerHTML = `
-                    <div class="movie-poster">
-                        <img src="${movie.poster_url || 'static/placeholder.jpg'}" alt="${movie.title}">
-                    </div>
-                    <h3>${movie.title}</h3>
-                    <p>${movie.genres}</p>
-                    <p class="predicted-rating">Predicted Rating: ${movie.predicted_rating.toFixed(1)}</p>
-                `;
-                recommendationsGrid.appendChild(movieCard);
-            });
+                if (!recommendations || recommendations.length === 0) {
+                    recommendationsGrid.innerHTML = '<div class="empty-state">No recommendations available</div>';
+                    return;
+                }
+
+                document.getElementById('recCount').textContent = recommendations.length;
+
+                recommendations.forEach((movie, index) => {
+                    const movieCard = document.createElement('div');
+                    movieCard.className = 'movie-card recommendation';
+                    movieCard.style.animationDelay = `${index * 0.05}s`;
+                    
+                    const ratingPercent = Math.min((movie.predicted_rating / 5) * 100, 100);
+                    
+                    movieCard.innerHTML = `
+                        <div class="movie-poster">
+                            <img src="${movie.poster_url || 'https://via.placeholder.com/200x300?text=No+Image'}" 
+                                 alt="${movie.title}"
+                                 onerror="this.src='https://via.placeholder.com/200x300?text=No+Image'">
+                            <div class="rating-badge">${movie.predicted_rating.toFixed(1)}</div>
+                        </div>
+                        <div class="movie-info">
+                            <h3>${movie.title}</h3>
+                            <p class="genres">${movie.genres || 'N/A'}</p>
+                            <div class="rating-bar">
+                                <div class="rating-fill" style="width: ${ratingPercent}%"></div>
+                            </div>
+                        </div>
+                    `;
+                    recommendationsGrid.appendChild(movieCard);
+                });
+            } catch (error) {
+                console.error('Error getting recommendations:', error);
+                showError('Failed to get recommendations. Try rating more movies.');
+            } finally {
+                document.getElementById('recsLoader').style.display = 'none';
+            }
+        }
+
+        function showError(message) {
+            const notification = document.createElement('div');
+            notification.className = 'notification error';
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            setTimeout(() => notification.remove(), 4000);
         }
 
         // Add event listener for search input

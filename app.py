@@ -77,4 +77,5 @@ def search_movies():
     return jsonify(movies)
 
 if __name__ == '__main__':
-    app.run(debug=True) 
+    # Run with debug=False for production on Vercel
+    app.run(debug=False) 

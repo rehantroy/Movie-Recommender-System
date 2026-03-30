@@ -2,12 +2,18 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.sparse.linalg import svds
+import os
 
 class MovieRecommender:
     def __init__(self):
         # Load and preprocess the movie dataset
-        self.movies_df = pd.read_csv('data/movies.csv')
-        self.ratings_df = pd.read_csv('data/ratings.csv')
+        # Handle both local and production environments
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        movies_path = os.path.join(base_dir, 'data', 'movies.csv')
+        ratings_path = os.path.join(base_dir, 'data', 'ratings.csv')
+        
+        self.movies_df = pd.read_csv(movies_path)
+        self.ratings_df = pd.read_csv(ratings_path)
         
         # Create user-movie matrix
         self.ratings_matrix = self.ratings_df.pivot(
